@@ -26,7 +26,10 @@ TILASTOT = {
     "Väestö": "vaesto_11ra",
     "Työttömyysaste, kausitasoitettu": "tyottomyysaste_135z",
     "Tehdyt työtunnit": "tyotunnit_13at",
-    "Ulkomaankauppa": "ulkomaankauppa_12gq",
+    "Tavaroiden ja palveluiden vienti, milj. €": "ulkomaankauppa_12gq",
+    "Vienti: viisi suurinta vientimaata, milj. €": "vientimaat_12gq",
+    "Kauppatase (tavarat), 12 kk liukuva summa, milj. €": "kauppatase_12gf",
+    "Vaihtotase, 12 kk liukuva summa, milj. €": "vaihtotase_12gf",
     "BKT:n volyymin vuosimuutos, %": "bkt_15a9",
     "Yksityisten kulutusmenojen volyymi, kausitasoitettu (milj. €, 2015)": "yksityiset_kulutusmenot_132h",
     "Kotitalouksien käytettävissä oleva nettotulo, reaalinen vuosimuutos, % (neljännes)":
@@ -151,10 +154,12 @@ def muodosta_pitka_data(data, tilasto):
         pitkana["Arvo"] = muunna_numeerinen(pitkana["Arvo"])
         pitkana = pitkana.dropna(subset=["Aika", "Arvo"])
 
-        if tilasto == "Ulkomaankauppa":
-            pitkana["Sarja"] = pitkana["Ajankohta_otsikko"].str.extract(
-                r"(Vienti|Tuonti)", flags=re.IGNORECASE
-            )[0].str.capitalize()
+        # Ulkomaankauppa: tavarat ja palvelut ovat otsikoissa ("2013Q1 G Tavarat Vienti, ...")
+        palveluera = pitkana["Ajankohta_otsikko"].str.extract(r"\b(Tavarat|Palvelut)\b")[0]
+        if palveluera.notna().all():
+            pitkana["Sarja"] = palveluera.map(
+                {"Tavarat": "Tavaroiden vienti", "Palvelut": "Palveluiden vienti"}
+            )
         else:
             pitkana = lisaa_sarja(pitkana, {"Ajankohta_otsikko"})
         return pitkana
@@ -297,7 +302,10 @@ def palauta_tavallinen_nakyma(app):
     app.alku_combo.config(state="readonly")
     app.loppu_combo.config(state="readonly")
 
-PYLVAS_TILASTOT = {"Inflaation alaerät (euroalue, %-yks.)"}
+PYLVAS_TILASTOT = {
+    "Inflaation alaerät (euroalue, %-yks.)",
+    "Vienti: viisi suurinta vientimaata, milj. €",
+}
 RYHMAPYLVAS_TILASTOT = {"Väkiluvun muutos, %: Helsinki, Tampere, Turku"}
 MAX_ERAA = 5
 
@@ -335,7 +343,14 @@ DASHBOARDIT = {
         ("Yksityisten kulutusmenojen volyymi, kausitasoitettu (milj. €, 2015)",
          "yksityiset_kulutusmenot_132h", "viiva"),
     ],
-    "4_asunnot": [
+    "4_ulkomaankauppa": [
+        ("Tavaroiden ja palveluiden vienti, milj. € (neljännes)", "ulkomaankauppa_12gq", "viiva"),
+        ("Kokonaisvienti ja viisi suurinta vientimaata, milj. € (vuosi)", "vientimaat_12gq",
+         "pylvas"),
+        ("Kauppatase (tavarat), 12 kk liukuva summa, milj. €", "kauppatase_12gf", "viiva"),
+        ("Vaihtotase, 12 kk liukuva summa, milj. €", "vaihtotase_12gf", "viiva"),
+    ],
+    "5_asunnot": [
         ("Vanhojen kerrostaloasuntojen hintaindeksi (2025=100)", "asunnot_hintaindeksi_kk",
          "viiva", KAUPUNKINIMET),
         ("Vapaarahoitteiset neliövuokrat, €/m²/kk", "asunnot_neliovuokrat", "viiva",
@@ -346,24 +361,24 @@ DASHBOARDIT = {
         ("Uudet asunnot, 12 kk summa (koko maa)", "asuntotuotanto_156f", "viiva"),
         ("Väkiluvun muutos, %", "vaeston_muutos_kaupungit_11ra", "ryhmapylvas"),
     ],
-    "5_korot_ja_inflaatio": [
+    "6_korot_ja_inflaatio": [
         ("10 v valtionlainakorot, %", "valtionlainakorot_10v_eurostat", "viiva"),
         ("OIS-korot (EKP), %", "korot_ois_ekp", "viiva"),
         ("Euroalueen inflaatio: alaerien kontribuutiot, %-yks.", "inflaatio_ctrb_eurostat", "pylvas"),
     ],
-    "6_pörssit": [
+    "7_pörssit": [
         ("USA: S&P 500, kuukauden sulkuarvo", "sp500_yahoo", "viiva"),
         ("Suomi: OMX Helsinki 25, kuukauden sulkuarvo", "omxh25_yahoo", "viiva"),
         ("Intia: Nifty 50, kuukauden sulkuarvo", "nifty50_yahoo", "viiva"),
         ("Kiina: Shanghai Composite, kuukauden sulkuarvo", "shanghai_yahoo", "viiva"),
     ],
-    "7_bkt_kasvu_globaalisti": [
+    "8_bkt_kasvu_globaalisti": [
         ("USA: BKT:n volyymin vuosimuutos, %", "bkt_kasvu_maailmanpankki", "pylvas", "USA"),
         ("Kiina: BKT:n volyymin vuosimuutos, %", "bkt_kasvu_maailmanpankki", "pylvas", "Kiina"),
         ("Intia: BKT:n volyymin vuosimuutos, %", "bkt_kasvu_maailmanpankki", "pylvas", "Intia"),
         ("EU: BKT:n volyymin vuosimuutos, %", "bkt_kasvu_maailmanpankki", "pylvas", "EU"),
     ],
-    "8_öljy_ja_raaka-aineet": [
+    "9_öljy_ja_raaka-aineet": [
         ("Brent-raakaöljy, USD/barreli", "brent_oljy_fred", "viiva"),
         ("Kulta, USD/unssi", "kulta_yahoo", "viiva"),
         ("Kupari, USD/pauna", "kupari_yahoo", "viiva"),
@@ -372,6 +387,12 @@ DASHBOARDIT = {
 }
 
 MAX_SARJAA = 6          # viivakuvaajassa enintään näin monta sarjaa / paneeli
+
+# Paneelin alle kirjoitettava huomautus (avaimena paneelin otsikko)
+HUOMAUTUKSET = {
+    "Vapaarahoitteiset neliövuokrat, €/m²/kk":
+        "Huom. tilastoinnin muutos 2025 (uusi taulukko, taso ei vertailukelpoinen)",
+}
 
 
 def piirra_pylvaat(ax, data):
@@ -384,6 +405,7 @@ def piirra_pylvaat(ax, data):
         index="Aika", columns="Sarja", values="Arvo", aggfunc="sum"
     ).sort_index()
     sarjat = list(leveä.abs().mean().sort_values(ascending=False).index)
+    sarjat.sort(key=lambda s: str(s).startswith("Muut"))   # "Muut ..." ylimmäksi
 
     x = leveä.index
     vali = pd.Series(x).diff().dt.days.median() if len(x) > 1 else 30
@@ -425,6 +447,9 @@ def piirra_ryhmapylvaat(ax, data):
 def piirra_paneeli(ax, otsikko, tyyli, data, virhe, alku, loppu):
     """Piirtää yhden dashboardin kuvaajan valitulle aikavälille."""
     ax.set_title(otsikko, fontsize=10)
+    if otsikko in HUOMAUTUKSET:
+        ax.set_xlabel(HUOMAUTUKSET[otsikko], fontsize=7, style="italic",
+                      color="dimgray", loc="left")
     ax.tick_params(labelsize=8)
     ax.grid(True, alpha=0.3)
 

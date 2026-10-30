@@ -23,6 +23,8 @@ from pathlib import Path
 
 import pandas as pd
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 
 # ==================================================
@@ -30,6 +32,14 @@ import requests
 # ==================================================
 
 TIETOKANTA = Path(__file__).resolve().parent / "tilastot.db"
+
+# Tilastokeskuksen rajapinta sallii n. 30 kyselyä / 10 s. Kun raja ylittyy
+# (429 Too Many Requests), odotetaan ja yritetään uudelleen (5, 10, 20, 40 s).
+PXWEB_ISTUNTO = requests.Session()
+PXWEB_ISTUNTO.mount("https://pxdata.stat.fi", HTTPAdapter(max_retries=Retry(
+    total=4, status_forcelist=[429], backoff_factor=5,
+    allowed_methods=None, raise_on_status=False,
+)))
 
 # --------------------------------------------------
 # Tilastokeskus
@@ -65,14 +75,31 @@ TILASTOT = {
         "mittari": "Työtunnit",
     },
     "4": {
-        "nimi": "Tavaroiden ja palveluiden ulkomaankauppa",
+        "nimi": "Tavaroiden ja palveluiden vienti",
         "api": (
             "https://pxdata.stat.fi/PxWeb/api/v1/fi/"
             "StatFin/tpulk/12gq.px"
         ),
         "taulu": "ulkomaankauppa_12gq",
-        "mittari": "Vienti ja tuonti",
-        "koodit": ["tpulk_C", "tpulk_D"],   # Vienti, Tuonti
+        "mittari": "Vienti",
+        "kysely": [
+            {
+                "code": "valtio_27_20180101",
+                "selection": {"filter": "item", "values": ["ULK"]},
+            },
+            {
+                "code": "timeperiod_q",
+                "selection": {"filter": "all", "values": ["*"]},
+            },
+            {
+                "code": "taloustoimi_1_20180101",
+                "selection": {"filter": "item", "values": ["G", "S"]},   # Tavarat, Palvelut
+            },
+            {
+                "code": "contentscode",
+                "selection": {"filter": "item", "values": ["tpulk_C"]},  # Vienti
+            },
+        ],
     },
     "5": {
         "nimi": "BKT:n volyymin vuosimuutos, %",
@@ -327,6 +354,52 @@ TILASTOT = {
             {
                 "code": "timeperiod_q",
                 "selection": {"filter": "all", "values": ["*"]},
+            },
+        ],
+    },
+    "18": {
+        "nimi": "Kauppatase (tavarat), 12 kk liukuva summa, milj. €",
+        "api": (
+            "https://pxdata.stat.fi/PxWeb/api/v1/fi/"
+            "StatFin/mata/12gf.px"
+        ),
+        "taulu": "kauppatase_12gf",
+        "mittari": "Kauppatase",
+        "kysely": [
+            {
+                "code": "timeperiod_m",
+                "selection": {"filter": "all", "values": ["*"]},
+            },
+            {
+                "code": "taloustoimi_1_20180101",
+                "selection": {"filter": "item", "values": ["G"]},
+            },
+            {
+                "code": "contentscode",
+                "selection": {"filter": "item", "values": ["B12"]},
+            },
+        ],
+    },
+    "19": {
+        "nimi": "Vaihtotase, 12 kk liukuva summa, milj. €",
+        "api": (
+            "https://pxdata.stat.fi/PxWeb/api/v1/fi/"
+            "StatFin/mata/12gf.px"
+        ),
+        "taulu": "vaihtotase_12gf",
+        "mittari": "Vaihtotase",
+        "kysely": [
+            {
+                "code": "timeperiod_m",
+                "selection": {"filter": "all", "values": ["*"]},
+            },
+            {
+                "code": "taloustoimi_1_20180101",
+                "selection": {"filter": "item", "values": ["CA"]},
+            },
+            {
+                "code": "contentscode",
+                "selection": {"filter": "item", "values": ["B12"]},
             },
         ],
     },
@@ -644,6 +717,22 @@ EKP_SARJAT = {
     },
 }
 
+# --------------------------------------------------
+# Tilastokeskus: tavaroiden ja palveluiden vienti maittain
+# Neljännekset summataan vuosiksi (vain täydet vuodet). Suurimmat maat
+# valitaan viimeisen täyden vuoden mukaan; loput = "Muut maat", jolloin
+# pylväiden korkeus on kokonaisvienti.
+# --------------------------------------------------
+
+VIENTIMAAT = {
+    "1": {
+        "nimi": "Vienti: viisi suurinta vientimaata, milj. €",
+        "taulu": "vientimaat_12gq",
+        "api": PXWEB + "StatFin/tpulk/12gq.px",
+        "maita": 5,
+    },
+}
+
 
 # ==================================================
 # 1. TILASTOKESKUS: TAULUKON METATIEDOT
@@ -652,7 +741,7 @@ EKP_SARJAT = {
 def hae_taulukko(tilasto):
     """Hakee valitun taulukon metatiedot."""
 
-    vastaus = requests.get(tilasto["api"], timeout=30)
+    vastaus = PXWEB_ISTUNTO.get(tilasto["api"], timeout=30)
     vastaus.raise_for_status()
 
     taulukko = vastaus.json()
@@ -783,7 +872,7 @@ def hae_tilastot(kysely, tilasto):
 
     print("\nHaetaan tilastolukuja...")
 
-    vastaus = requests.post(
+    vastaus = PXWEB_ISTUNTO.post(
         tilasto["api"],
         json={
             "query": kysely,
@@ -871,7 +960,7 @@ def hae_pxweb_lahde(lahde, jarjestys):
     """Hakee yhden PxWeb-lähteen JSON-stat2-muodossa. Palauttaa sarakkeet
     aika, Sarja, Arvo ja etusija (suurempi etusija voittaa päällekkäisissä)."""
 
-    vastaus = requests.post(
+    vastaus = PXWEB_ISTUNTO.post(
         lahde["api"],
         json={"query": muodosta_asuntokysely(lahde),
               "response": {"format": "json-stat2"}},
@@ -1481,6 +1570,66 @@ def hae_ja_tallenna_ekp_sarja(kohde):
 
 
 # ==================================================
+# 7b. TILASTOKESKUS: VIENTI MAITTAIN
+# ==================================================
+
+def hae_vientimaat(kohde):
+    """Hakee viennin maittain ja laskee vuosisummat suurimmille maille
+    ja muille maille. Palauttaa: Vuosi, Sarja, Arvo."""
+
+    kysely = [
+        {"code": "valtio_27_20180101", "selection": {"filter": "all", "values": ["*"]}},
+        {"code": "timeperiod_q", "selection": {"filter": "all", "values": ["*"]}},
+        {"code": "taloustoimi_1_20180101", "selection": {"filter": "item", "values": ["GS"]}},
+        {"code": "contentscode", "selection": {"filter": "item", "values": ["tpulk_C"]}},
+    ]
+    vastaus = PXWEB_ISTUNTO.post(
+        kohde["api"],
+        json={"query": kysely, "response": {"format": "json-stat2"}},
+        timeout=60
+    )
+    vastaus.raise_for_status()
+
+    data, _kategoriat, nimet = jsonstat_dataframe(vastaus.json())
+    data = data.rename(columns={"valtio_27_20180101": "maa"})
+    data["Vuosi"] = data["timeperiod_q"].str[:4]
+
+    # Vain täydet vuodet (kaikki neljä neljännestä)
+    taydet = data.groupby("Vuosi")["timeperiod_q"].nunique()
+    data = data[data["Vuosi"].isin(taydet[taydet == 4].index)]
+    vuodet = data.groupby(["Vuosi", "maa"], as_index=False)["arvo"].sum()
+
+    # Yksittäiset maat ovat numerokoodeja (esim. 840), alueet kirjainkoodeja
+    maat = vuodet[vuodet["maa"].str.fullmatch(r"\d{3}")]
+    viimeisin = maat["Vuosi"].max()
+    suurimmat = (maat[maat["Vuosi"] == viimeisin]
+                 .nlargest(kohde["maita"], "arvo")["maa"].tolist())
+
+    leveä = vuodet.pivot(index="Vuosi", columns="maa", values="arvo")
+    tulos = leveä[suurimmat].rename(columns=nimet["valtio_27_20180101"])
+    tulos["Muut maat"] = leveä["ULK"] - leveä[suurimmat].sum(axis=1)
+
+    return (tulos.reset_index()
+                 .melt(id_vars="Vuosi", var_name="Sarja", value_name="Arvo")
+                 .dropna(subset=["Arvo"]))
+
+
+def hae_ja_tallenna_vientimaat(kohde):
+    """Hakee viennin maittain ja tallentaa sen tietokantaan."""
+
+    print("\n" + "=" * 50)
+    print(f"HAETAAN (Tilastokeskus): {kohde['nimi']}")
+    print("=" * 50)
+
+    data = hae_vientimaat(kohde)
+
+    print(f"Maat: {', '.join(m for m in data['Sarja'].unique() if m != 'Muut maat')}; "
+          f"{data['Vuosi'].min()} -> {data['Vuosi'].max()}")
+    tallenna_tietokantaan(data, kohde)
+    return True
+
+
+# ==================================================
 # 8. OHJELMAN PÄÄTOIMINTO
 # ==================================================
 
@@ -1497,6 +1646,7 @@ def main():
         + [(f["nimi"], hae_ja_tallenna_fred, f) for f in FRED.values()]
         + [(o["nimi"], hae_ja_tallenna_ois, o) for o in OIS.values()]
         + [(e["nimi"], hae_ja_tallenna_ekp_sarja, e) for e in EKP_SARJAT.values()]
+        + [(v["nimi"], hae_ja_tallenna_vientimaat, v) for v in VIENTIMAAT.values()]
     )
 
     onnistuneet = []
