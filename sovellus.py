@@ -1,9 +1,9 @@
 """
 Paikallinen tilastosovellus
 - Ei käytä internetiä.
-- Lukee tilastot.db-tiedoston samasta kansiosta kuin tämä app2.py.
+- Lukee tilastot.db-tiedoston kansiosta ~/.local/share/tilastosovellus/.
 - Edellyttää Pythonin lisäksi pandas- ja matplotlib-kirjastoja.
-Käynnistys: python app2.py
+Käynnistys: python sovellus.py
 """
 
 import re
@@ -18,8 +18,9 @@ import pandas as pd
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
+from asetukset import TIETOKANTA
 
-TIETOKANTA = Path(__file__).resolve().parent / "tilastot.db"
+
 KANSIO = Path(__file__).resolve().parent
 
 TILASTOT = {
@@ -67,7 +68,7 @@ TILASTOT = {
     "Väestöennuste 2024: 20–34-vuotiaat": "vaestoennuste_20_34_14wx",
 }
 
-# Asuntodashboardissa näytettävät kaupungit (samat nimet kuin projekti_nolla.py:ssä;
+# Asuntodashboardissa näytettävät kaupungit (samat nimet kuin hae_tilastot.py:ssä;
 # tietokannassa on lisäksi Espoo, Vantaa ja Oulu)
 KAUPUNKINIMET = ["Helsinki", "Tampere", "Turku"]
 
@@ -219,8 +220,8 @@ def muodosta_pitka_data(data, tilasto):
 PAIVITYS_KOODI = """
 import sys
 sys.path.insert(0, sys.argv[1])
-import projekti_nolla as pn
-sys.exit(pn.main())
+import hae_tilastot
+sys.exit(hae_tilastot.main())
 """
 
 
@@ -623,14 +624,14 @@ class TilastoSovellus:
             nayta_dashboard(self, nimi)
             return
         palauta_tavallinen_nakyma(self)
-          # loput metodista ennallaan
         try:
             raaka = lue_taulutietokanta(TILASTOT[nimi])
             self.data = muodosta_pitka_data(raaka, nimi)
         except Exception as e:
             messagebox.showerror(
                 "Tietojen lataus epäonnistui",
-                f"{e}\n\nVarmista, että tilastot.db on app.py-tiedoston kanssa samassa kansiossa."
+                f"{e}\n\nVarmista, että tietokanta on olemassa: {TIETOKANTA}\n"
+                "Sen voi luoda painikkeella Päivitä tietokanta netistä."
             )
             return
 

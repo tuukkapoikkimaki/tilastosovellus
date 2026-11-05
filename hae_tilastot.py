@@ -1,6 +1,6 @@
 """
 Hakee tilastoja netistä ja tallentaa ne SQLite-tietokantaan tilastot.db
-(samaan kansioon kuin tämä tiedosto).
+(kansioon ~/.local/share/tilastosovellus/).
 
 Lähteet:
   - Tilastokeskus (PxWeb-rajapinta), myös asuntosijoittajan tilastot
@@ -12,26 +12,25 @@ Lähteet:
   - FRED (Brent-raakaöljyn hinta)
   - Euroopan keskuspankki EKP (OIS-korot, 12 kk Euribor)
 
-Käynnistys: python projekti_nolla.py
+Käynnistys: python hae_tilastot.py
 """
 
 import re
 import sqlite3
 import sys
 from io import StringIO
-from pathlib import Path
 
 import pandas as pd
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from asetukset import DATAKANSIO, TIETOKANTA
+
 
 # ==================================================
 # ASETUKSET
 # ==================================================
-
-TIETOKANTA = Path(__file__).resolve().parent / "tilastot.db"
 
 # Tilastokeskuksen rajapinta sallii n. 30 kyselyä / 10 s. Kun raja ylittyy
 # (429 Too Many Requests), odotetaan ja yritetään uudelleen (5, 10, 20, 40 s).
@@ -903,6 +902,7 @@ def tallenna_tietokantaan(data, tilasto):
         print("Rajapinta ei palauttanut tilastorivejä.")
         return
 
+    DATAKANSIO.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(TIETOKANTA) as yhteys:
         data.to_sql(
             tilasto["taulu"],
@@ -1033,7 +1033,7 @@ def hae_asuntotilasto(kohde):
         data = (data.sort_values("etusija", kind="stable")
                     .drop_duplicates(["aika", "Sarja"], keep="last"))
 
-    # Aikasarakkeen nimi aikamuodon mukaan (app2 tunnistaa nämä)
+    # Aikasarakkeen nimi aikamuodon mukaan (sovellus.py tunnistaa nämä)
     if data["aika"].str.contains("Q").any():
         aikasarake = "Neljännes"
     elif data["aika"].str.contains("M").any():
