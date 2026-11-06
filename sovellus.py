@@ -1,11 +1,12 @@
 """
 Paikallinen tilastosovellus
 - Ei käytä internetiä.
-- Lukee tilastot.db-tiedoston kansiosta ~/.local/share/tilastosovellus/.
+- Lukee tilastot.db-tiedoston käyttäjän datakansiosta (ks. asetukset.py).
 - Edellyttää Pythonin lisäksi pandas- ja matplotlib-kirjastoja.
 Käynnistys: python sovellus.py
 """
 
+import os
 import re
 import sqlite3
 import sys
@@ -71,6 +72,24 @@ TILASTOT = {
 # Asuntodashboardissa näytettävät kaupungit (samat nimet kuin hae_tilastot.py:ssä;
 # tietokannassa on lisäksi Espoo, Vantaa ja Oulu)
 KAUPUNKINIMET = ["Helsinki", "Tampere", "Turku"]
+
+# Tietolähde taulun nimen päätteen mukaan (hae_tilastot.py nimeää taulut näin);
+# muut taulut ovat Tilastokeskuksen PxWeb-rajapinnasta
+LAHTEET = {
+    "_yahoo": "Yahoo Finance",
+    "_eurostat": "Eurostat",
+    "_ekp": "Euroopan keskuspankki (EKP)",
+    "_fred": "FRED (Federal Reserve Bank of St. Louis)",
+    "_maailmanpankki": "Maailmanpankki",
+}
+
+
+def tilaston_lahde(taulu):
+    """Palauttaa tietokantataulun tietolähteen nimen."""
+    for paate, lahde in LAHTEET.items():
+        if taulu.endswith(paate):
+            return lahde
+    return "Tilastokeskus"
 
 # Tunnistaa otsikot: 1975, 2024*, 2020Q1, 2020M03 sekä näiden perässä
 # olevan tekstin (esim. "1976 Volyymin muutokset, %")
@@ -238,6 +257,10 @@ def kaynnista_paivitys(root, nappi, tila_label, valmis_callback):
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            # Windowsilla putken oletusmerkistö on cp1252, joten käytetään UTF-8:aa
+            encoding="utf-8",
+            errors="replace",
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         )
     except Exception as e:
         paivitys_valmis(nappi, tila_label, valmis_callback, -1, str(e))
@@ -445,12 +468,13 @@ def piirra_ryhmapylvaat(ax, data):
         ax.legend()
 
 
-def piirra_paneeli(ax, otsikko, tyyli, data, virhe, alku, loppu):
+def piirra_paneeli(ax, otsikko, tyyli, data, virhe, lahde, alku, loppu):
     """Piirtää yhden dashboardin kuvaajan valitulle aikavälille."""
     ax.set_title(otsikko, fontsize=10)
+    alateksti = f"Lähde: {lahde}"
     if otsikko in HUOMAUTUKSET:
-        ax.set_xlabel(HUOMAUTUKSET[otsikko], fontsize=7, style="italic",
-                      color="dimgray", loc="left")
+        alateksti += f"  |  {HUOMAUTUKSET[otsikko]}"
+    ax.set_xlabel(alateksti, fontsize=7, style="italic", color="dimgray", loc="left")
     ax.tick_params(labelsize=8)
     ax.grid(True, alpha=0.3)
 
@@ -483,7 +507,7 @@ def piirra_paneeli(ax, otsikko, tyyli, data, virhe, alku, loppu):
 
 
 def lataa_dashboard_data(paneelit):
-    """Lukee dashboardin taulut tietokannasta. Palauttaa (otsikko, tyyli, data, virhe)."""
+    """Lukee dashboardin taulut tietokannasta. Palauttaa (otsikko, tyyli, data, virhe, lähde)."""
     tulos = []
     for otsikko, taulu, tyyli, *suodatin in paneelit:
         try:
@@ -496,7 +520,7 @@ def lataa_dashboard_data(paneelit):
             virhe = None if not data.empty else "Aikarakennetta tai sarjaa ei löytynyt"
         except Exception as e:
             data, virhe = pd.DataFrame(), f"Ei tietoja\n{str(e)[:70]}"
-        tulos.append((otsikko, tyyli, data, virhe))
+        tulos.append((otsikko, tyyli, data, virhe, tilaston_lahde(taulu)))
     return tulos
 
 
@@ -519,11 +543,11 @@ def piirra_dashboard(app):
 
     fig = Figure(figsize=(11, 6.5), dpi=100)
     ruudukko = fig.add_gridspec(rivit, sarakkeita)
-    for i, (otsikko, tyyli, data, virhe) in enumerate(app.dash_data):
+    for i, (otsikko, tyyli, data, virhe, lahde) in enumerate(app.dash_data):
         r, c = divmod(i, sarakkeita)
         viimeinen_pariton = (i == n - 1) and (n % sarakkeita != 0)
         ax = fig.add_subplot(ruudukko[r, :] if viimeinen_pariton else ruudukko[r, c])
-        piirra_paneeli(ax, otsikko, tyyli, data, virhe, alku, loppu)
+        piirra_paneeli(ax, otsikko, tyyli, data, virhe, lahde, alku, loppu)
     fig.tight_layout()
 
     canvas = FigureCanvasTkAgg(fig, master=app.kuvaaja_frame)
@@ -539,7 +563,7 @@ def nayta_dashboard(app, nimi):
 
     # Alkaen/Päättyen-valinnat vuosina: kaikkien paneelien yhteinen aikaväli
     valinnat = [str(v) for v in sorted({
-        int(v) for _o, _t, data, virhe in app.dash_data if not virhe
+        int(v) for _o, _t, data, virhe, _l in app.dash_data if not virhe
         for v in data["Aika"].dt.year.unique()
     })]
     app.alku_combo["values"] = valinnat
@@ -727,6 +751,11 @@ class TilastoSovellus:
         ax.set_xlabel("Ajankohta")
         ax.grid(True, alpha=0.3)
         fig.tight_layout()
+
+        # Lähde pakataan ennen kuvaajaa, jotta se pysyy näkyvissä pienessäkin ikkunassa
+        lahde = tilaston_lahde(TILASTOT[self.tilasto_var.get()])
+        ttk.Label(self.kuvaaja_frame, text=f"Lähde: {lahde}",
+                  foreground="dimgray").pack(side="bottom", anchor="w")
 
         canvas = FigureCanvasTkAgg(fig, master=self.kuvaaja_frame)
         canvas.draw()

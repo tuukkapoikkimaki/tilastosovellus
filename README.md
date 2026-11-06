@@ -5,6 +5,8 @@ Tiedot haetaan avoimista rajapinnoista SQLite-tietokantaan (`tilastot.db`), ja
 sovellus näyttää ne taulukkona, kuvaajina ja koottuina dashboardeina ilman
 internetyhteyttä.
 
+Sovellus on tehty toimimaan Windowsilla, Linuxilla ja macOS:llä.
+
 ## Rakenne
 
 | Tiedosto | Tehtävä |
@@ -13,19 +15,18 @@ internetyhteyttä.
 | `sovellus.py` | Tkinter-käyttöliittymä, joka lukee tilastot paikallisesta tietokannasta. |
 | `asetukset.py` | Yhteiset asetukset, kuten tietokannan sijainti. |
 | `requirements.txt` | Tarvittavat Python-kirjastot. |
-| `*.png` | Esimerkkikuvaajia (väestö, työttömyys, työtunnit, ulkomaankauppa). |
 
 ## Tietokanta
 
-Tietokanta sijaitsee käyttäjän datakansiossa XDG-käytännön mukaisesti:
+Tietokanta tallennetaan käyttäjän datakansioon, ei projektikansioon:
 
-```
-~/.local/share/tilastosovellus/tilastot.db
-```
+| Käyttöjärjestelmä | Sijainti |
+| --- | --- |
+| Windows | `%LOCALAPPDATA%\tilastosovellus\tilastot.db` (esim. `C:\Users\<nimi>\AppData\Local\tilastosovellus\`) |
+| Linux / macOS | `~/.local/share/tilastosovellus/tilastot.db` (tai `$XDG_DATA_HOME/tilastosovellus/`) |
 
-Jos ympäristömuuttuja `XDG_DATA_HOME` on asetettu, käytetään kansiota
-`$XDG_DATA_HOME/tilastosovellus/`. `hae_tilastot.py` luo kansion
-tarvittaessa.
+`hae_tilastot.py` luo kansion tarvittaessa. Tietokantaa ei tallenneta
+versionhallintaan, vaan jokainen käyttäjä hakee tiedot itse.
 
 ## Tietolähteet
 
@@ -39,21 +40,47 @@ tarvittaessa.
 - **FRED**: Brent-raakaöljyn hinta
 - **Euroopan keskuspankki (EKP)**: OIS-korot ja 12 kk Euribor
 
-Mikään lähteistä ei vaadi API-avainta.
+Mikään lähteistä ei vaadi API-avainta. Tilastokeskuksen avoin data on
+lisensoitu [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/deed.fi)
+-lisenssillä; tietoja käytettäessä lähde on mainittava (Tilastokeskus). Muiden
+lähteiden tietoja koskevat niiden omat käyttöehdot.
 
 ## Asennus
 
-Tarvitaan Python 3.12 (tai uudempi) ja Tkinter.
+Tarvitaan Python 3.12 tai uudempi sekä Tkinter.
+
+Lataa ensin projekti:
+
+```bash
+git clone <repon-osoite>
+cd tilastokeskus
+```
+
+Kirjastot kannattaa asentaa virtuaaliympäristöön, jolloin ne eivät sekoitu
+koneen muihin Python-kirjastoihin.
+
+### Windows
+
+1. Asenna Python osoitteesta [python.org](https://www.python.org/downloads/).
+   Valitse asennuksessa **Add python.exe to PATH**. Tkinter tulee asennuksen
+   mukana.
+2. Avaa PowerShell tai komentokehote projektikansiossa ja aja:
+
+   ```powershell
+   py -m venv .venv
+   .venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
+
+   Jos PowerShell estää aktivoinnin (*running scripts is disabled*), aja
+   ensin `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` tai käytä
+   komentokehotetta (`cmd`).
+
+### Linux / macOS
 
 ```bash
 python3 -m venv .venv
-```
-
-```bash
 source .venv/bin/activate
-```
-
-```bash
 pip install -r requirements.txt
 ```
 
@@ -61,13 +88,18 @@ Linuxilla Tkinter voi vaatia erillisen paketin, esim. `sudo apt install python3-
 
 ## Käyttö
 
+Aktivoi virtuaaliympäristö ensin (ks. yllä). Aktivoidussa ympäristössä
+komento on kaikilla käyttöjärjestelmillä `python`.
+
 1. Hae tilastot tietokantaan:
 
    ```bash
    python hae_tilastot.py
    ```
 
-   Lopuksi tulostuu yhteenveto onnistuneista ja epäonnistuneista hauista.
+   Lopuksi tulostuu yhteenveto onnistuneista
+   ja epäonnistuneista hauista. Tietokannan voi luoda myös sovelluksen
+   painikkeella **Päivitä tietokanta netistä**.
 
 2. Käynnistä sovellus:
 

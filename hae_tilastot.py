@@ -1,6 +1,6 @@
 """
 Hakee tilastoja netistä ja tallentaa ne SQLite-tietokantaan tilastot.db
-(kansioon ~/.local/share/tilastosovellus/).
+(käyttäjän datakansioon, ks. asetukset.py).
 
 Lähteet:
   - Tilastokeskus (PxWeb-rajapinta), myös asuntosijoittajan tilastot
