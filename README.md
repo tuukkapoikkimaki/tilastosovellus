@@ -52,8 +52,8 @@ Tarvitaan Python 3.12 tai uudempi sekä Tkinter.
 Lataa ensin projekti:
 
 ```bash
-git clone <repon-osoite>
-cd tilastokeskus
+git clone https://github.com/tuukkapoikkimaki/tilastosovellus.git
+cd tilastosovellus
 ```
 
 Kirjastot kannattaa asentaa virtuaaliympäristöön, jolloin ne eivät sekoitu
